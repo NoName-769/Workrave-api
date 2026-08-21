@@ -19,6 +19,36 @@ app.get("/", (req, res) => {
 });
 
 const agentesRegistrados = {};
+const estadosAgentes = {};
+
+app.post("/api/agents/:id/heartbeat", (req, res) => {
+
+    const agente = obtenerAgente(req.params.id);
+
+    if (!agente) {
+        return res.status(404).json({
+            success: false,
+            message: "Agente no encontrado"
+        });
+    }
+
+    const { running } = req.body;
+
+    estadosAgentes[agente.id] = {
+        connected: true,
+        running: !!running,
+        lastSeen: Date.now()
+    };
+
+    if (agentesRegistrados[agente.id]) {
+        agentesRegistrados[agente.id].connected = true;
+        agentesRegistrados[agente.id].lastSeen = Date.now();
+    }
+
+    res.json({
+        success: true
+    });
+});
 
 function obtenerAgente(id) {
     return agentesRegistrados[id] || agentes[id];
@@ -131,7 +161,7 @@ app.post("/api/agents/register", (req, res) => {
 
 
 
-app.get("/api/agents", async (req, res) => {
+app.get("/api/agents", (req, res) => {
 
     const todosLosAgentes = {
         ...agentes,
@@ -142,42 +172,15 @@ app.get("/api/agents", async (req, res) => {
 
     for (const agente of Object.values(todosLosAgentes)) {
 
-        try {
+        const estado = estadosAgentes[agente.id];
 
-            const statusResponse = await fetch(
-                `${agente.url}/api/workrave/status`
-            );
-
-            if (!statusResponse.ok) {
-                throw new Error("Agente no respondió");
-            }
-
-            const status = await statusResponse.json();
-
-            if (agentesRegistrados[agente.id]) {
-                agentesRegistrados[agente.id].connected = true;
-                agentesRegistrados[agente.id].lastSeen =
-                    Date.now();
-            }
-
-            resultado.push({
-                id: agente.id,
-                hostname: agente.hostname || agente.id,
-                url: agente.url,
-                connected: true,
-                workrave: status.running
-            });
-
-        } catch (error) {
-
-            resultado.push({
-                id: agente.id,
-                hostname: agente.hostname || agente.id,
-                url: agente.url,
-                connected: false,
-                workrave: false
-            });
-        }
+        resultado.push({
+            id: agente.id,
+            hostname: agente.hostname || agente.id,
+            url: agente.url,
+            connected: estado ? estado.connected : false,
+            workrave: estado ? estado.running : false
+        });
     }
 
     res.json(resultado);
