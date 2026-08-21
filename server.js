@@ -20,6 +20,7 @@ app.get("/", (req, res) => {
 
 const agentesRegistrados = {};
 const estadosAgentes = {};
+const estadisticasAgentes = {}; 
 
 app.post("/api/agents/:id/heartbeat", (req, res) => {
 
@@ -37,6 +38,32 @@ app.post("/api/agents/:id/heartbeat", (req, res) => {
     estadosAgentes[agente.id] = {
         connected: true,
         running: !!running,
+        lastSeen: Date.now()
+    };
+
+    if (agentesRegistrados[agente.id]) {
+        agentesRegistrados[agente.id].connected = true;
+        agentesRegistrados[agente.id].lastSeen = Date.now();
+    }
+
+    res.json({
+        success: true
+    });
+});
+
+app.post("/api/agents/:id/stats", (req, res) => {
+
+    const agente = obtenerAgente(req.params.id);
+
+    if (!agente) {
+        return res.status(404).json({
+            success: false,
+            message: "Agente no encontrado"
+        });
+    }
+
+    estadisticasAgentes[agente.id] = {
+        stats: req.body.stats,
         lastSeen: Date.now()
     };
 
@@ -223,7 +250,7 @@ app.get("/api/agents/:id/status", async (req, res) => {
 });
 
 
-app.get("/api/agents/:id/stats", async (req, res) => {
+app.get("/api/agents/:id/stats", (req, res) => {
 
     const agente = obtenerAgente(req.params.id);
 
@@ -234,34 +261,20 @@ app.get("/api/agents/:id/stats", async (req, res) => {
         });
     }
 
-    try {
+    const estadisticas = estadisticasAgentes[agente.id];
 
-        const response = await fetch(
-            `${agente.url}/api/workrave/stats`
-        );
-
-        if (!response.ok) {
-            throw new Error(
-                "El agente no respondió correctamente"
-            );
-        }
-
-        const data = await response.json();
-
-        res.json({
-            id: agente.id,
-            connected: true,
-            stats: data
-        });
-
-    } catch (error) {
-
-        res.status(503).json({
-            id: agente.id,
-            connected: false,
-            message: "No se pudieron obtener las estadísticas"
+    if (!estadisticas) {
+        return res.status(503).json({
+            success: false,
+            message: "El agente todavía no ha enviado estadísticas"
         });
     }
+
+    res.json({
+        id: agente.id,
+        connected: true,
+        stats: estadisticas.stats
+    });
 });
 
 
